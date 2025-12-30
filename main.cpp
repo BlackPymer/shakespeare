@@ -174,6 +174,20 @@ std::vector<std::vector<float>> transpose(const std::vector<std::vector<float>> 
     }
     return res;
 }
+
+std::vector<std::vector<float>> hadamard(
+    const std::vector<std::vector<float>>& A,
+    const std::vector<std::vector<float>>& B
+) {
+    if (A.size() != B.size()) throw std::invalid_argument("hadamard: bad batch size");
+    std::vector<std::vector<float>> R = A;
+    for (size_t i = 0; i < R.size(); ++i) {
+        if (R[i].size() != B[i].size()) throw std::invalid_argument("hadamard: bad row size");
+        for (size_t j = 0; j < R[i].size(); ++j)
+            R[i][j] *= B[i][j];
+    }
+    return R;
+}
 #pragma endregion
 
 #pragma region Backward functions
@@ -328,16 +342,26 @@ int main()
         outputs[i % backwardRate] = output;
         if (i % backwardRate == backwardRate - 1)
         {
-            std::vector<std::vector<float>> b;
-            std::vector<std::vector<float>> dw2;
-            std::vector<std::vector<float>> dw1;
+            std::vector<std::vector<float>> b(1, std::vector<float>(65));
+            std::vector<std::vector<float>> dw2(65, std::vector<float>(65));
+            std::vector<std::vector<float>> dw1(65, std::vector<float>(65));
+            std::vector<std::vector<float>> db2(1, std::vector<float>(65));
+            std::vector<std::vector<float>> db1(1, std::vector<float>(65));
             for (int j = i; j > i - backwardRate; --j)
             {
+                output = outputs[j % backwardRate];
                 float loss = softmax_cross_entropy_loss_onehot(output.softmaxOutput, {batches[j + 1]});
                 avgLoss += loss / (size(batches) / backwardRate);
 
                 auto softmax_grad = softmax_cross_entropy_grad(output.softmaxOutput, {batches[j + 1]});
-                dw2 = matadd(matmul(transpose(output.linearOutput2), softmax_grad), dw2);
+                dw2 = matadd(matmul(transpose(output.thOutput), softmax_grad), dw2);
+                db2 = matadd(db2, softmax_grad);
+
+                auto dtanh = matadd(matmul(softmax_grad, transpose(weights2)), b);
+                auto dtanh_dlinear = hadamard(dtanh, tanh_derivative(output.thOutput));
+                dw1 = matadd(dw1, matmul(transpose({batches[j]}), dtanh_dlinear));
+                db1 = matadd(db1, dtanh_dlinear);
+                b = dtanh_dlinear;
             }
         }
     }
