@@ -29,7 +29,7 @@ struct SymbolOutputs
 };
 
 #pragma region Forward functions
-inline std::vector<std::vector<float>> softmax(
+std::vector<std::vector<float>> softmax(
     const std::vector<std::vector<float>> &xs)
 {
     std::vector<std::vector<float>> out;
@@ -73,8 +73,8 @@ inline std::vector<std::vector<float>> softmax(
     return out;
 }
 
-inline void init_params_uniform(std::vector<std::vector<float>> &w,
-                                float low = -1.0f, float high = 1.0f)
+void init_params_uniform(std::vector<std::vector<float>> &w,
+                         float low = -1.0f, float high = 1.0f)
 {
     std::random_device rd;
     std::mt19937 gen(rd());
@@ -85,7 +85,7 @@ inline void init_params_uniform(std::vector<std::vector<float>> &w,
             x = dist(gen);
 }
 
-inline std::vector<std::vector<float>> apply_sigmoid(const std::vector<std::vector<float>> &A)
+std::vector<std::vector<float>> apply_sigmoid(const std::vector<std::vector<float>> &A)
 {
     std::vector<std::vector<float>> R = A;
     for (auto &row : R)
@@ -94,7 +94,7 @@ inline std::vector<std::vector<float>> apply_sigmoid(const std::vector<std::vect
     return R;
 }
 
-inline std::vector<std::vector<float>> apply_tanh(const std::vector<std::vector<float>> &A)
+std::vector<std::vector<float>> apply_tanh(const std::vector<std::vector<float>> &A)
 {
     std::vector<std::vector<float>> R = A;
     for (auto &row : R)
@@ -103,12 +103,12 @@ inline std::vector<std::vector<float>> apply_tanh(const std::vector<std::vector<
     return R;
 }
 
-inline std::vector<std::vector<float>> mult(const std::vector<std::vector<float>> &A, float num)
+std::vector<std::vector<float>> mult(const std::vector<std::vector<float>> &A, float num)
 {
     std::vector<std::vector<float>> res = A;
-    for (auto i : res)
+    for (auto &row : res)
     {
-        for (float &el : i)
+        for (float &el : row)
         {
             el *= num;
         }
@@ -116,12 +116,15 @@ inline std::vector<std::vector<float>> mult(const std::vector<std::vector<float>
     return res;
 }
 
-inline std::vector<std::vector<float>> matadd(
+std::vector<std::vector<float>> matadd(
     const std::vector<std::vector<float>> &A,
     const std::vector<std::vector<float>> &B)
 {
     if (A.size() != B.size())
+    {
+        std::cout << A.size() << " not equals to " << B.size() << "   0\n";
         throw std::invalid_argument("Bad dimensions for matadd");
+    }
     if (A.empty())
         return {};
 
@@ -130,7 +133,10 @@ inline std::vector<std::vector<float>> matadd(
     for (size_t i = 0; i < m; ++i)
     {
         if (A[i].size() != n || B[i].size() != n)
+        {
+            std::cout << A.size() << " not equals to " << B.size() << "   1\n";
             throw std::invalid_argument("Bad dimensions for matadd");
+        }
     }
 
     std::vector<std::vector<float>> C(m, std::vector<float>(n));
@@ -141,7 +147,7 @@ inline std::vector<std::vector<float>> matadd(
     return C;
 }
 
-inline std::vector<std::vector<float>> matmul(
+std::vector<std::vector<float>> matmul(
     const std::vector<std::vector<float>> &A,
     const std::vector<std::vector<float>> &B)
 {
@@ -176,12 +182,16 @@ inline std::vector<std::vector<float>> matmul(
     return C;
 }
 
-inline std::vector<std::vector<float>> transpose(const std::vector<std::vector<float>> &matrix)
+std::vector<std::vector<float>> transpose(const std::vector<std::vector<float>> &matrix)
 {
-    std::vector<std::vector<float>> res(matrix[0].size(), std::vector<float>(matrix.size()));
-    for (int i = 0; i < matrix[0].size(); ++i)
+    if (matrix.empty() || matrix[0].empty())
     {
-        for (int j = 0; j < matrix.size(); ++j)
+        return {};
+    }
+    std::vector<std::vector<float>> res(matrix[0].size(), std::vector<float>(matrix.size()));
+    for (size_t i = 0; i < matrix[0].size(); ++i)
+    {
+        for (size_t j = 0; j < matrix.size(); ++j)
         {
             res[i][j] = matrix[j][i];
         }
@@ -189,7 +199,7 @@ inline std::vector<std::vector<float>> transpose(const std::vector<std::vector<f
     return res;
 }
 
-inline std::vector<std::vector<float>> hadamard(
+std::vector<std::vector<float>> hadamard(
     const std::vector<std::vector<float>> &A,
     const std::vector<std::vector<float>> &B)
 {
@@ -208,7 +218,7 @@ inline std::vector<std::vector<float>> hadamard(
 #pragma endregion
 
 #pragma region Backward functions
-inline std::vector<std::vector<float>> sigmoid_derivative(
+std::vector<std::vector<float>> sigmoid_derivative(
     const std::vector<std::vector<float>> &Y)
 {
     std::vector<std::vector<float>> R = Y;
@@ -218,7 +228,7 @@ inline std::vector<std::vector<float>> sigmoid_derivative(
     return R;
 }
 
-inline std::vector<std::vector<float>> tanh_derivative(
+std::vector<std::vector<float>> tanh_derivative(
     const std::vector<std::vector<float>> &Y)
 {
     std::vector<std::vector<float>> R = Y;
@@ -228,7 +238,7 @@ inline std::vector<std::vector<float>> tanh_derivative(
     return R;
 }
 
-inline std::vector<std::vector<std::vector<float>>> softmax_derivative(
+std::vector<std::vector<std::vector<float>>> softmax_derivative(
     const std::vector<std::vector<float>> &Y)
 {
     std::vector<std::vector<std::vector<float>>> J;
@@ -251,7 +261,7 @@ inline std::vector<std::vector<std::vector<float>>> softmax_derivative(
     return J;
 }
 
-inline std::vector<std::vector<float>> softmax_cross_entropy_grad(
+std::vector<std::vector<float>> softmax_cross_entropy_grad(
     const std::vector<std::vector<float>> &P,
     const std::vector<std::vector<float>> &Y)
 {
@@ -275,7 +285,7 @@ inline std::vector<std::vector<float>> softmax_cross_entropy_grad(
     return dZ;
 }
 
-inline float softmax_cross_entropy_loss_onehot(
+float softmax_cross_entropy_loss_onehot(
     const std::vector<std::vector<float>> &P,
     const std::vector<std::vector<float>> &Y,
     float eps = 1e-12f)
@@ -312,26 +322,28 @@ int main()
     while (fin.get(tmp))
         symbols.insert(tmp);
     std::cout << symbols.size() << '\n';
-    float i = 0;
-    for (const auto &sym : symbols)
     {
-        TOKENS[sym] = i++;
-        std::cout << sym << ' ';
+        float i = 0;
+        for (const auto &sym : symbols)
+        {
+            TOKENS[sym] = i++;
+            std::cout << sym << ' ';
+        }
+        fin.close();
+        fin.open("input.txt");
     }
-    fin.close();
-    fin.open("input.txt");
     std::vector<std::vector<float>> batches;
     while (fin.get(tmp))
     {
         std::vector<float> batch(65, 0);
         batch[TOKENS[tmp]] = 1;
+        batches.push_back(batch);
     }
     fin.close();
 
     // nn init
     std::vector<std::vector<float>> weights1(65, std::vector<float>(65));
     std::vector<std::vector<float>> weights2(65, std::vector<float>(65));
-
     std::vector<std::vector<float>> bias1(1, std::vector<float>(65));
     std::vector<std::vector<float>> bias2(1, std::vector<float>(65));
 
@@ -342,23 +354,29 @@ int main()
     init_params_uniform(bias2);
 
     // forward
-
     std::vector<SymbolOutputs> outputs(backwardRate);
     float avgLoss = 0;
     for (int i = 0; i < size(batches) - 1; ++i)
     {
-        std::vector<std::vector<float>> x = {batches[i]};
+        std::vector<std::vector<float>> x;
+        x.push_back(batches[i]);
         SymbolOutputs output;
         auto N = matmul(x, weights1);
         output.linearOutput = matadd(N, bias1);
-        if (i != 0)
-            output.linearOutput = matadd(output.linearOutput, outputs[i - 1].thOutput);
+
+        if (i % backwardRate != 0 && !outputs[(i - 1) % backwardRate].thOutput.empty())
+        {
+
+            int prev_idx = (i - 1) % backwardRate;
+            output.linearOutput = matadd(output.linearOutput, outputs[prev_idx].thOutput);
+        }
         output.thOutput = apply_tanh(output.linearOutput);
 
         output.linearOutput2 = matadd(matmul(output.thOutput, weights2), bias2);
         output.softmaxOutput = softmax(output.linearOutput2);
 
         outputs[i % backwardRate] = output;
+
         if (i % backwardRate == backwardRate - 1)
         {
             std::vector<std::vector<float>> b(1, std::vector<float>(65, 0));
@@ -368,7 +386,8 @@ int main()
             std::vector<std::vector<float>> db1(1, std::vector<float>(65, 0));
             for (int j = i; j > i - backwardRate; --j)
             {
-                output = outputs[j % backwardRate];
+                int output_idx = j % backwardRate;
+                output = outputs[output_idx];
                 float loss = softmax_cross_entropy_loss_onehot(output.softmaxOutput, {batches[j + 1]});
                 avgLoss += loss / (size(batches) / backwardRate);
 
@@ -378,14 +397,18 @@ int main()
 
                 auto dtanh = matadd(matmul(softmax_grad, transpose(weights2)), b);
                 auto dtanh_dlinear = hadamard(dtanh, tanh_derivative(output.thOutput));
-                dw1 = matadd(dw1, matmul(transpose({batches[j]}), dtanh_dlinear));
+                if (j >= 0 && j < static_cast<int>(batches.size()))
+                {
+                    std::vector<std::vector<float>> batch_j_transposed = transpose({batches[j]}); // <--- ПРАВИЛЬНО: транспонируем как матрицу 1xN -> Nx1
+                    dw1 = matadd(dw1, matmul(batch_j_transposed, dtanh_dlinear));
+                }
                 db1 = matadd(db1, dtanh_dlinear);
                 b = dtanh_dlinear;
             }
-            weights1 = matadd(weights1, mult(dw1, learningRate));
-            weights2 = matadd(weights2, mult(dw2, learningRate));
-            bias1 = matadd(bias1, mult(db1, learningRate));
-            bias2 = matadd(bias2, mult(db2, learningRate));
+            weights1 = matadd(weights1, mult(dw1, -learningRate));
+            weights2 = matadd(weights2, mult(dw2, -learningRate));
+            bias1 = matadd(bias1, mult(db1, -learningRate));
+            bias2 = matadd(bias2, mult(db2, -learningRate));
         }
     }
     return 0;
