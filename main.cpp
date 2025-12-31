@@ -12,6 +12,7 @@
 #pragma region constants
 
 #define backwardRate 50
+#define learningRate 0.01f
 
 #pragma endregion
 
@@ -28,7 +29,7 @@ struct SymbolOutputs
 };
 
 #pragma region Forward functions
-std::vector<std::vector<float>> softmax(
+inline std::vector<std::vector<float>> softmax(
     const std::vector<std::vector<float>> &xs)
 {
     std::vector<std::vector<float>> out;
@@ -72,8 +73,8 @@ std::vector<std::vector<float>> softmax(
     return out;
 }
 
-void init_params_uniform(std::vector<std::vector<float>> &w,
-                         float low = -1.0f, float high = 1.0f)
+inline void init_params_uniform(std::vector<std::vector<float>> &w,
+                                float low = -1.0f, float high = 1.0f)
 {
     std::random_device rd;
     std::mt19937 gen(rd());
@@ -84,7 +85,7 @@ void init_params_uniform(std::vector<std::vector<float>> &w,
             x = dist(gen);
 }
 
-std::vector<std::vector<float>> apply_sigmoid(const std::vector<std::vector<float>> &A)
+inline std::vector<std::vector<float>> apply_sigmoid(const std::vector<std::vector<float>> &A)
 {
     std::vector<std::vector<float>> R = A;
     for (auto &row : R)
@@ -93,7 +94,7 @@ std::vector<std::vector<float>> apply_sigmoid(const std::vector<std::vector<floa
     return R;
 }
 
-std::vector<std::vector<float>> apply_tanh(const std::vector<std::vector<float>> &A)
+inline std::vector<std::vector<float>> apply_tanh(const std::vector<std::vector<float>> &A)
 {
     std::vector<std::vector<float>> R = A;
     for (auto &row : R)
@@ -102,7 +103,20 @@ std::vector<std::vector<float>> apply_tanh(const std::vector<std::vector<float>>
     return R;
 }
 
-std::vector<std::vector<float>> matadd(
+inline std::vector<std::vector<float>> mult(const std::vector<std::vector<float>> &A, float num)
+{
+    std::vector<std::vector<float>> res = A;
+    for (auto i : res)
+    {
+        for (float &el : i)
+        {
+            el *= num;
+        }
+    }
+    return res;
+}
+
+inline std::vector<std::vector<float>> matadd(
     const std::vector<std::vector<float>> &A,
     const std::vector<std::vector<float>> &B)
 {
@@ -127,7 +141,7 @@ std::vector<std::vector<float>> matadd(
     return C;
 }
 
-std::vector<std::vector<float>> matmul(
+inline std::vector<std::vector<float>> matmul(
     const std::vector<std::vector<float>> &A,
     const std::vector<std::vector<float>> &B)
 {
@@ -162,7 +176,7 @@ std::vector<std::vector<float>> matmul(
     return C;
 }
 
-std::vector<std::vector<float>> transpose(const std::vector<std::vector<float>> &matrix)
+inline std::vector<std::vector<float>> transpose(const std::vector<std::vector<float>> &matrix)
 {
     std::vector<std::vector<float>> res(matrix[0].size(), std::vector<float>(matrix.size()));
     for (int i = 0; i < matrix[0].size(); ++i)
@@ -175,14 +189,17 @@ std::vector<std::vector<float>> transpose(const std::vector<std::vector<float>> 
     return res;
 }
 
-std::vector<std::vector<float>> hadamard(
-    const std::vector<std::vector<float>>& A,
-    const std::vector<std::vector<float>>& B
-) {
-    if (A.size() != B.size()) throw std::invalid_argument("hadamard: bad batch size");
+inline std::vector<std::vector<float>> hadamard(
+    const std::vector<std::vector<float>> &A,
+    const std::vector<std::vector<float>> &B)
+{
+    if (A.size() != B.size())
+        throw std::invalid_argument("hadamard: bad batch size");
     std::vector<std::vector<float>> R = A;
-    for (size_t i = 0; i < R.size(); ++i) {
-        if (R[i].size() != B[i].size()) throw std::invalid_argument("hadamard: bad row size");
+    for (size_t i = 0; i < R.size(); ++i)
+    {
+        if (R[i].size() != B[i].size())
+            throw std::invalid_argument("hadamard: bad row size");
         for (size_t j = 0; j < R[i].size(); ++j)
             R[i][j] *= B[i][j];
     }
@@ -191,7 +208,7 @@ std::vector<std::vector<float>> hadamard(
 #pragma endregion
 
 #pragma region Backward functions
-std::vector<std::vector<float>> sigmoid_derivative(
+inline std::vector<std::vector<float>> sigmoid_derivative(
     const std::vector<std::vector<float>> &Y)
 {
     std::vector<std::vector<float>> R = Y;
@@ -201,7 +218,7 @@ std::vector<std::vector<float>> sigmoid_derivative(
     return R;
 }
 
-std::vector<std::vector<float>> tanh_derivative(
+inline std::vector<std::vector<float>> tanh_derivative(
     const std::vector<std::vector<float>> &Y)
 {
     std::vector<std::vector<float>> R = Y;
@@ -211,7 +228,7 @@ std::vector<std::vector<float>> tanh_derivative(
     return R;
 }
 
-std::vector<std::vector<std::vector<float>>> softmax_derivative(
+inline std::vector<std::vector<std::vector<float>>> softmax_derivative(
     const std::vector<std::vector<float>> &Y)
 {
     std::vector<std::vector<std::vector<float>>> J;
@@ -234,7 +251,7 @@ std::vector<std::vector<std::vector<float>>> softmax_derivative(
     return J;
 }
 
-std::vector<std::vector<float>> softmax_cross_entropy_grad(
+inline std::vector<std::vector<float>> softmax_cross_entropy_grad(
     const std::vector<std::vector<float>> &P,
     const std::vector<std::vector<float>> &Y)
 {
@@ -258,7 +275,7 @@ std::vector<std::vector<float>> softmax_cross_entropy_grad(
     return dZ;
 }
 
-float softmax_cross_entropy_loss_onehot(
+inline float softmax_cross_entropy_loss_onehot(
     const std::vector<std::vector<float>> &P,
     const std::vector<std::vector<float>> &Y,
     float eps = 1e-12f)
@@ -334,6 +351,8 @@ int main()
         SymbolOutputs output;
         auto N = matmul(x, weights1);
         output.linearOutput = matadd(N, bias1);
+        if (i != 0)
+            output.linearOutput = matadd(output.linearOutput, outputs[i - 1].thOutput);
         output.thOutput = apply_tanh(output.linearOutput);
 
         output.linearOutput2 = matadd(matmul(output.thOutput, weights2), bias2);
@@ -342,11 +361,11 @@ int main()
         outputs[i % backwardRate] = output;
         if (i % backwardRate == backwardRate - 1)
         {
-            std::vector<std::vector<float>> b(1, std::vector<float>(65));
-            std::vector<std::vector<float>> dw2(65, std::vector<float>(65));
-            std::vector<std::vector<float>> dw1(65, std::vector<float>(65));
-            std::vector<std::vector<float>> db2(1, std::vector<float>(65));
-            std::vector<std::vector<float>> db1(1, std::vector<float>(65));
+            std::vector<std::vector<float>> b(1, std::vector<float>(65, 0));
+            std::vector<std::vector<float>> dw2(65, std::vector<float>(65, 0));
+            std::vector<std::vector<float>> dw1(65, std::vector<float>(65, 0));
+            std::vector<std::vector<float>> db2(1, std::vector<float>(65, 0));
+            std::vector<std::vector<float>> db1(1, std::vector<float>(65, 0));
             for (int j = i; j > i - backwardRate; --j)
             {
                 output = outputs[j % backwardRate];
@@ -363,6 +382,10 @@ int main()
                 db1 = matadd(db1, dtanh_dlinear);
                 b = dtanh_dlinear;
             }
+            weights1 = matadd(weights1, mult(dw1, learningRate));
+            weights2 = matadd(weights2, mult(dw2, learningRate));
+            bias1 = matadd(bias1, mult(db1, learningRate));
+            bias2 = matadd(bias2, mult(db2, learningRate));
         }
     }
     return 0;
