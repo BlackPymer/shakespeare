@@ -8,15 +8,16 @@
 #include <cmath>
 #include <algorithm>
 #include <limits>
+#include <string>
+#include <fstream>
 
-#pragma region constants
-
-#define backwardRate 50
+#define backwardRate 10
 #define learningRate 0.01f
 
-#pragma endregion
-
-std::ifstream fin;
+const char *W1_FILENAME = "w1.bin";
+const char *W2_FILENAME = "w2.bin";
+const char *B1_FILENAME = "b1.bin";
+const char *B2_FILENAME = "b2.bin";
 
 std::map<char, char> TOKENS;
 
@@ -27,7 +28,11 @@ struct SymbolOutputs
     std::vector<std::vector<float>> linearOutput2;
     std::vector<std::vector<float>> softmaxOutput;
 };
-
+bool file_exists(const std::string &filename)
+{
+    std::ifstream file(filename);
+    return file.good();
+}
 #pragma region Forward functions
 std::vector<std::vector<float>> softmax(
     const std::vector<std::vector<float>> &xs)
@@ -313,9 +318,157 @@ float softmax_cross_entropy_loss_onehot(
 }
 #pragma endregion
 
-int main()
+bool load_vector(std::vector<std::vector<float>> &vec, const std::string &filename)
 {
-    // dataset opening
+    if (!file_exists(filename))
+    {
+        std::cerr << "File '" << filename << "' not found, keeping zero vector" << std::endl;
+        return false;
+    }
+
+    std::ifstream file(filename, std::ios::binary);
+    if (!file)
+    {
+        std::cerr << "Failed to open '" << filename << "' for reading" << std::endl;
+        return false;
+    }
+
+    size_t rows = 0;
+    size_t cols = 0;
+
+    if (!file.read(reinterpret_cast<char *>(&rows), sizeof(rows)))
+    {
+        std::cerr << "Failed to read rows from '" << filename << "'" << std::endl;
+        return false;
+    }
+
+    vec.clear();
+    vec.reserve(rows);
+
+    for (size_t i = 0; i < rows; i++)
+    {
+        if (!file.read(reinterpret_cast<char *>(&cols), sizeof(cols)))
+        {
+            std::cerr << "Failed to read cols from '" << filename << "' at row " << i << std::endl;
+            return false;
+        }
+
+        std::vector<float> row(cols);
+        if (!file.read(reinterpret_cast<char *>(row.data()), cols * sizeof(float)))
+        {
+            std::cerr << "Failed to read data from '" << filename << "' at row " << i << std::endl;
+            return false;
+        }
+
+        vec.push_back(std::move(row));
+    }
+
+    std::cout << "Successfully loaded '" << filename << "': "
+              << rows << "x" << (vec.empty() ? 0 : vec[0].size()) << std::endl;
+    return true;
+}
+
+bool save_vector(const std::vector<std::vector<float>> &vec, const std::string &filename)
+{
+    std::ofstream file(filename, std::ios::binary);
+    if (!file)
+    {
+        std::cerr << "Failed to open '" << filename << "' for writing" << std::endl;
+        return false;
+    }
+
+    size_t rows = vec.size();
+    file.write(reinterpret_cast<const char *>(&rows), sizeof(rows));
+
+    for (const auto &row : vec)
+    {
+        size_t cols = row.size();
+        file.write(reinterpret_cast<const char *>(&cols), sizeof(cols));
+        file.write(reinterpret_cast<const char *>(row.data()), cols * sizeof(float));
+    }
+
+    std::cout << "Successfully saved '" << filename << "': "
+              << rows << "x" << (vec.empty() ? 0 : vec[0].size()) << std::endl;
+    return file.good();
+}
+
+void forward(
+    const std::vector<std::vector<float>> &weights1,
+    const std::vector<std::vector<float>> &bias1,
+    const std::vector<std::vector<float>> &weights2,
+    const std::vector<std::vector<float>> &bias2,
+    const std::vector<std::vector<float>> &batches,
+    int i,
+    std::vector<SymbolOutputs> &outputs)
+{
+
+    std::vector<std::vector<float>> x;
+    x.push_back(batches[i]);
+    SymbolOutputs output;
+    auto N = matmul(x, weights1);
+    output.linearOutput = matadd(N, bias1);
+
+    if (i % backwardRate != 0 && !outputs[(i - 1) % backwardRate].thOutput.empty())
+    {
+
+        int prev_idx = (i - 1) % backwardRate;
+        output.linearOutput = matadd(output.linearOutput, outputs[prev_idx].thOutput);
+    }
+    output.thOutput = apply_tanh(output.linearOutput);
+
+    output.linearOutput2 = matadd(matmul(output.thOutput, weights2), bias2);
+    output.softmaxOutput = softmax(output.linearOutput2);
+
+    outputs[i % backwardRate] = output;
+}
+void backward(bool shouldPrint, const std::vector<std::vector<float>> &batches,
+              std::vector<std::vector<float>> &weights1,
+              std::vector<std::vector<float>> &weights2,
+              std ::vector<std::vector<float>> &bias1,
+              std::vector<std::vector<float>> &bias2,
+              std::vector<SymbolOutputs> &outputs, int i)
+{
+    float avgLoss = 0;
+
+    std::vector<std::vector<float>> b(1, std::vector<float>(65, 0));
+    std::vector<std::vector<float>> dw2(65, std::vector<float>(65, 0));
+    std::vector<std::vector<float>> dw1(65, std::vector<float>(65, 0));
+    std::vector<std::vector<float>> db2(1, std::vector<float>(65, 0));
+    std::vector<std::vector<float>> db1(1, std::vector<float>(65, 0));
+    SymbolOutputs output;
+    for (int j = i; j > i - backwardRate; --j)
+    {
+
+        int output_idx = j % backwardRate;
+        output = outputs[output_idx];
+        float loss = softmax_cross_entropy_loss_onehot(output.softmaxOutput, {batches[j + 1]});
+        avgLoss += loss / (backwardRate);
+
+        auto softmax_grad = softmax_cross_entropy_grad(output.softmaxOutput, {batches[j + 1]});
+        dw2 = matadd(matmul(transpose(output.thOutput), softmax_grad), dw2);
+        db2 = matadd(db2, softmax_grad);
+
+        auto dtanh = matadd(matmul(softmax_grad, transpose(weights2)), b);
+        auto dtanh_dlinear = hadamard(dtanh, tanh_derivative(output.thOutput));
+        if (j >= 0 && j < static_cast<int>(batches.size()))
+        {
+            std::vector<std::vector<float>> batch_j_transposed = transpose({batches[j]}); // <--- ПРАВИЛЬНО: транспонируем как матрицу 1xN -> Nx1
+            dw1 = matadd(dw1, matmul(batch_j_transposed, dtanh_dlinear));
+        }
+        db1 = matadd(db1, dtanh_dlinear);
+        b = dtanh_dlinear;
+    }
+    weights1 = matadd(weights1, mult(dw1, -learningRate));
+    weights2 = matadd(weights2, mult(dw2, -learningRate));
+    bias1 = matadd(bias1, mult(db1, -learningRate));
+    bias2 = matadd(bias2, mult(db2, -learningRate));
+    if (shouldPrint)
+        std::cout << i << '\t' << avgLoss << '\n';
+}
+void load_tokens(const std::string &filename)
+{
+
+    std::ifstream fin;
     fin.open("input.txt");
     std::set<char> symbols;
     char tmp;
@@ -330,86 +483,11 @@ int main()
             std::cout << sym << ' ';
         }
         fin.close();
-        fin.open("input.txt");
     }
-    std::vector<std::vector<float>> batches;
-    while (fin.get(tmp))
-    {
-        std::vector<float> batch(65, 0);
-        batch[TOKENS[tmp]] = 1;
-        batches.push_back(batch);
-    }
-    fin.close();
-
-    // nn init
-    std::vector<std::vector<float>> weights1(65, std::vector<float>(65));
-    std::vector<std::vector<float>> weights2(65, std::vector<float>(65));
-    std::vector<std::vector<float>> bias1(1, std::vector<float>(65));
-    std::vector<std::vector<float>> bias2(1, std::vector<float>(65));
-
-    init_params_uniform(weights1);
-    init_params_uniform(weights2);
-
-    init_params_uniform(bias1);
-    init_params_uniform(bias2);
-
-    // forward
-    std::vector<SymbolOutputs> outputs(backwardRate);
-    float avgLoss = 0;
-    for (int i = 0; i < size(batches) - 1; ++i)
-    {
-        std::vector<std::vector<float>> x;
-        x.push_back(batches[i]);
-        SymbolOutputs output;
-        auto N = matmul(x, weights1);
-        output.linearOutput = matadd(N, bias1);
-
-        if (i % backwardRate != 0 && !outputs[(i - 1) % backwardRate].thOutput.empty())
-        {
-
-            int prev_idx = (i - 1) % backwardRate;
-            output.linearOutput = matadd(output.linearOutput, outputs[prev_idx].thOutput);
-        }
-        output.thOutput = apply_tanh(output.linearOutput);
-
-        output.linearOutput2 = matadd(matmul(output.thOutput, weights2), bias2);
-        output.softmaxOutput = softmax(output.linearOutput2);
-
-        outputs[i % backwardRate] = output;
-
-        if (i % backwardRate == backwardRate - 1)
-        {
-            std::vector<std::vector<float>> b(1, std::vector<float>(65, 0));
-            std::vector<std::vector<float>> dw2(65, std::vector<float>(65, 0));
-            std::vector<std::vector<float>> dw1(65, std::vector<float>(65, 0));
-            std::vector<std::vector<float>> db2(1, std::vector<float>(65, 0));
-            std::vector<std::vector<float>> db1(1, std::vector<float>(65, 0));
-            for (int j = i; j > i - backwardRate; --j)
-            {
-                int output_idx = j % backwardRate;
-                output = outputs[output_idx];
-                float loss = softmax_cross_entropy_loss_onehot(output.softmaxOutput, {batches[j + 1]});
-                avgLoss += loss / (size(batches) / backwardRate);
-
-                auto softmax_grad = softmax_cross_entropy_grad(output.softmaxOutput, {batches[j + 1]});
-                dw2 = matadd(matmul(transpose(output.thOutput), softmax_grad), dw2);
-                db2 = matadd(db2, softmax_grad);
-
-                auto dtanh = matadd(matmul(softmax_grad, transpose(weights2)), b);
-                auto dtanh_dlinear = hadamard(dtanh, tanh_derivative(output.thOutput));
-                if (j >= 0 && j < static_cast<int>(batches.size()))
-                {
-                    std::vector<std::vector<float>> batch_j_transposed = transpose({batches[j]}); // <--- ПРАВИЛЬНО: транспонируем как матрицу 1xN -> Nx1
-                    dw1 = matadd(dw1, matmul(batch_j_transposed, dtanh_dlinear));
-                }
-                db1 = matadd(db1, dtanh_dlinear);
-                b = dtanh_dlinear;
-            }
-            weights1 = matadd(weights1, mult(dw1, -learningRate));
-            weights2 = matadd(weights2, mult(dw2, -learningRate));
-            bias1 = matadd(bias1, mult(db1, -learningRate));
-            bias2 = matadd(bias2, mult(db2, -learningRate));
-        }
-    }
-    return 0;
+}
+std::vector<float> to_token(char symbol)
+{
+    std::vector<float> vec(65, 0);
+    vec[TOKENS[symbol]] = 1.0f;
+    return vec;
 }
