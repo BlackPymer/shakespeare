@@ -18,14 +18,20 @@ const char *W1_FILENAME = "w1.bin";
 const char *W2_FILENAME = "w2.bin";
 const char *B1_FILENAME = "b1.bin";
 const char *B2_FILENAME = "b2.bin";
+const char *W3_FILENAME = "w3.bin";
+const char *B3_FILENAME = "b3.bin";
+const char *HUYURUS1_FILENAME = "huyurus1.bin";
+const char *HUYURUS2_FILENAME = "huyurus2.bin";
+const char *HUYURUS3_FILENAME = "huyurus3.bin";
 
 std::map<char, char> TOKENS;
 
 struct SymbolOutputs
 {
-    std::vector<std::vector<float>> linearOutput;
-    std::vector<std::vector<float>> thOutput;
-    std::vector<std::vector<float>> linearOutput2;
+    std::vector<std::vector<float>> rt;
+    std::vector<std::vector<float>> zt;
+    std::vector<std::vector<float>> ht;
+    std::vector<std::vector<float>> output;
     std::vector<std::vector<float>> softmaxOutput;
 };
 bool file_exists(const std::string &filename)
@@ -290,6 +296,21 @@ std::vector<std::vector<float>> softmax_cross_entropy_grad(
     return dZ;
 }
 
+std::vector<std::vector<float>> diag(const std::vector<std::vector<float>> &v)
+{
+    if (v.empty() || v[0].empty())
+        return {};
+
+    const size_t n = v[0].size();
+    std::vector<std::vector<float>> D(n, std::vector<float>(n, 0.0f));
+
+    for (size_t i = 0; i < n; ++i)
+    {
+        D[i][i] = v[i][i];
+    }
+    return D;
+}
+
 float softmax_cross_entropy_loss_onehot(
     const std::vector<std::vector<float>> &P,
     const std::vector<std::vector<float>> &Y,
@@ -397,6 +418,11 @@ void forward(
     const std::vector<std::vector<float>> &bias1,
     const std::vector<std::vector<float>> &weights2,
     const std::vector<std::vector<float>> &bias2,
+    const std::vector<std::vector<float>> &weights3,
+    const std::vector<std::vector<float>> &bias3,
+    const std::vector<std::vector<float>> &huyurus1,
+    const std::vector<std::vector<float>> &huyurus2,
+    const std::vector<std::vector<float>> &huyurus3,
     const std::vector<std::vector<float>> &batches,
     int i,
     std::vector<SymbolOutputs> &outputs)
@@ -405,27 +431,31 @@ void forward(
     std::vector<std::vector<float>> x;
     x.push_back(batches[i]);
     SymbolOutputs output;
-    auto N = matmul(x, weights1);
-    output.linearOutput = matadd(N, bias1);
+    std::vector<std::vector<float>> prev_output;
+    if (i == 0)
+        prev_output = std::vector<std::vector<float>>(1, std::vector<float>(65, 0));
+    else
+        prev_output = outputs[(i - 1) % backwardRate].output;
+    output.rt = apply_sigmoid(matadd(matadd(matmul(x, weights1), bias1), matmul(prev_output, huyurus1)));
+    output.zt = apply_sigmoid(matadd(matadd(matmul(x, weights2), bias2), matmul(prev_output, huyurus2)));
+    output.ht = apply_tanh(matadd(matadd(matmul(x, weights3), bias3), matmul(hadamard(output.rt, prev_output), huyurus3)));
 
-    if (i % backwardRate != 0 && !outputs[(i - 1) % backwardRate].thOutput.empty())
-    {
+    std::vector<std::vector<float>> ones(1, std::vector<float>(output.zt[0].size(), 1.0f));
 
-        int prev_idx = (i - 1) % backwardRate;
-        output.linearOutput = matadd(output.linearOutput, outputs[prev_idx].thOutput);
-    }
-    output.thOutput = apply_tanh(output.linearOutput);
-
-    output.linearOutput2 = matadd(matmul(output.thOutput, weights2), bias2);
-    output.softmaxOutput = softmax(output.linearOutput2);
-
+    output.output = matadd(matmul(matadd(mult(output.zt, -1.0f), ones), prev_output), mult(hadamard(output.ht, output.zt), 1.0f));
+    output.softmaxOutput = softmax(output.output);
     outputs[i % backwardRate] = output;
 }
 void backward(bool shouldPrint, const std::vector<std::vector<float>> &batches,
               std::vector<std::vector<float>> &weights1,
               std::vector<std::vector<float>> &weights2,
-              std ::vector<std::vector<float>> &bias1,
+              std::vector<std::vector<float>> &weights3,
+              std::vector<std::vector<float>> &bias1,
               std::vector<std::vector<float>> &bias2,
+              std::vector<std::vector<float>> &bias3,
+              std::vector<std::vector<float>> &huyurus1,
+              std::vector<std::vector<float>> &huyurus2,
+              std::vector<std::vector<float>> &huyurus3,
               std::vector<SymbolOutputs> &outputs, int i)
 {
     float avgLoss = 0;
@@ -435,33 +465,41 @@ void backward(bool shouldPrint, const std::vector<std::vector<float>> &batches,
     std::vector<std::vector<float>> dw1(65, std::vector<float>(65, 0));
     std::vector<std::vector<float>> db2(1, std::vector<float>(65, 0));
     std::vector<std::vector<float>> db1(1, std::vector<float>(65, 0));
+    std::vector<std::vector<float>> dw3(65, std::vector<float>(65, 0));
+    std::vector<std::vector<float>> db3(1, std::vector<float>(65, 0));
+    std::vector<std::vector<float>> dhuyurus1(65, std::vector<float>(65, 0));
+    std::vector<std::vector<float>> dhuyurus2(65, std::vector<float>(65, 0));
+    std::vector<std::vector<float>> dhuyurus3(65, std::vector<float>(65, 0));
     SymbolOutputs output;
     for (int j = i; j > i - backwardRate; --j)
     {
-
+        std::vector<std::vector<float>> prev_output;
+        if (j == 0)
+            prev_output = std::vector<std::vector<float>>(1, std::vector<float>(65, 0));
+        else
+            prev_output = outputs[(i - 1) % backwardRate].output;
         int output_idx = j % backwardRate;
         output = outputs[output_idx];
         float loss = softmax_cross_entropy_loss_onehot(output.softmaxOutput, {batches[j + 1]});
         avgLoss += loss / (backwardRate);
+        std::vector<std::vector<float>> doutput = matadd(softmax_cross_entropy_grad(output.softmaxOutput, {batches[j + 1]}), b);
 
-        auto softmax_grad = softmax_cross_entropy_grad(output.softmaxOutput, {batches[j + 1]});
-        dw2 = matadd(matmul(transpose(output.thOutput), softmax_grad), dw2);
-        db2 = matadd(db2, softmax_grad);
+        std::vector<std::vector<float>> ones(1, std::vector<float>(output.ht[0].size(), 1.0f));
 
-        auto dtanh = matadd(matmul(softmax_grad, transpose(weights2)), b);
-        auto dtanh_dlinear = hadamard(dtanh, tanh_derivative(output.thOutput));
-        if (j >= 0 && j < static_cast<int>(batches.size()))
-        {
-            std::vector<std::vector<float>> batch_j_transposed = transpose({batches[j]}); // <--- ПРАВИЛЬНО: транспонируем как матрицу 1xN -> Nx1
-            dw1 = matadd(dw1, matmul(batch_j_transposed, dtanh_dlinear));
-        }
-        db1 = matadd(db1, dtanh_dlinear);
-        b = dtanh_dlinear;
+        std::vector<std::vector<float>> doutput_condidate = hadamard(hadamard(output.zt, doutput), matadd(ones, mult(hadamard(output.ht, output.ht), -1.0f)));
+        db3 = matadd(db3, doutput_condidate);
+        dw3 = matadd(dw3, matmul(transpose({batches[j]}), doutput_condidate));
+        dhuyurus3 = matadd(dhuyurus3, matmul(transpose(hadamard(output.rt, prev_output)), doutput_condidate));
     }
     weights1 = matadd(weights1, mult(dw1, -learningRate));
     weights2 = matadd(weights2, mult(dw2, -learningRate));
+    weights3 = matadd(weights3, mult(dw3, -learningRate));
+    huyurus1 = matadd(huyurus1, mult(dhuyurus1, -learningRate));
+    huyurus2 = matadd(huyurus2, mult(dhuyurus2, -learningRate));
+    huyurus3 = matadd(huyurus3, mult(dhuyurus3, -learningRate));
     bias1 = matadd(bias1, mult(db1, -learningRate));
     bias2 = matadd(bias2, mult(db2, -learningRate));
+    bias3 = matadd(bias3, mult(db3, -learningRate));
     if (shouldPrint)
         std::cout << i << '\t' << avgLoss << '\n';
 }

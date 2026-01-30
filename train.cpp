@@ -31,19 +31,34 @@ int main()
     // nn init
     std::vector<std::vector<float>> weights1(65, std::vector<float>(65, 0));
     std::vector<std::vector<float>> weights2(65, std::vector<float>(65, 0));
+    std::vector<std::vector<float>> weights3(65, std::vector<float>(65, 0));
     std::vector<std::vector<float>> bias1(1, std::vector<float>(65, 0));
     std::vector<std::vector<float>> bias2(1, std::vector<float>(65, 0));
-
+    std::vector<std::vector<float>> bias3(1, std::vector<float>(65, 0));
+    std::vector<std::vector<float>> huyurus1(65, std::vector<float>(65, 0));
+    std::vector<std::vector<float>> huyurus2(65, std::vector<float>(65, 0));
+    std::vector<std::vector<float>> huyurus3(65, std::vector<float>(65, 0));
     load_vector(weights1, W1_FILENAME);
     load_vector(weights2, W2_FILENAME);
+    load_vector(weights3, W3_FILENAME);
     load_vector(bias1, B1_FILENAME);
     load_vector(bias2, B2_FILENAME);
+    load_vector(bias3, B3_FILENAME);
+    load_vector(huyurus1, HUYURUS1_FILENAME);
+    load_vector(huyurus2, HUYURUS2_FILENAME);
+    load_vector(huyurus3, HUYURUS3_FILENAME);
 
     init_params_uniform(weights1);
     init_params_uniform(weights2);
+    init_params_uniform(weights3);
 
     init_params_uniform(bias1);
     init_params_uniform(bias2);
+    init_params_uniform(bias3);
+
+    init_params_uniform(huyurus1);
+    init_params_uniform(huyurus2);
+    init_params_uniform(huyurus3);
 
     // forward
     std::vector<SymbolOutputs> outputs(backwardRate);
