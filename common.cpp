@@ -477,7 +477,7 @@ void backward(bool shouldPrint, const std::vector<std::vector<float>> &batches,
         if (j == 0)
             prev_output = std::vector<std::vector<float>>(1, std::vector<float>(65, 0));
         else
-            prev_output = outputs[(i - 1) % backwardRate].output;
+            prev_output = outputs[(j - 1) % backwardRate].output;
         int output_idx = j % backwardRate;
         output = outputs[output_idx];
         float loss = softmax_cross_entropy_loss_onehot(output.softmaxOutput, {batches[j + 1]});
@@ -486,10 +486,23 @@ void backward(bool shouldPrint, const std::vector<std::vector<float>> &batches,
 
         std::vector<std::vector<float>> ones(1, std::vector<float>(output.ht[0].size(), 1.0f));
 
-        std::vector<std::vector<float>> doutput_condidate = hadamard(hadamard(output.zt, doutput), matadd(ones, mult(hadamard(output.ht, output.ht), -1.0f)));
+        std::vector<std::vector<float>> doutput_condidate = hadamard(hadamard(doutput, output.zt), matadd(ones, mult(hadamard(output.ht, output.ht), -1.0f)));
         db3 = matadd(db3, doutput_condidate);
         dw3 = matadd(dw3, matmul(transpose({batches[j]}), doutput_condidate));
         dhuyurus3 = matadd(dhuyurus3, matmul(transpose(hadamard(output.rt, prev_output)), doutput_condidate));
+        auto drt = hadamard(matmul(doutput_condidate, transpose(huyurus3)), prev_output);
+        auto dN = hadamard(drt, sigmoid_derivative(output.rt));
+        dw1 = matadd(dw1, matmul(transpose({batches[j]}), dN));
+        db1 = matadd(db1, dN);
+        dhuyurus1 = matadd(dhuyurus1, matmul(transpose(prev_output), dN));
+        std::vector<std::vector<float>> dzt = matadd(output.ht, mult(prev_output, -1.0f));
+        dzt = hadamard(hadamard(dzt, doutput), hadamard(output.zt, matadd(ones, mult(output.zt, -1))));
+        dw2 = matadd(dw2, matmul(transpose({batches[j]}), dzt));
+        dhuyurus2 = matadd(dhuyurus2, matmul(transpose(prev_output), dzt));
+        db2 = matadd(db2, dzt);
+        b = matadd(b, matadd(matadd(mult(output.zt, -1), ones), hadamard(prev_output, matmul(hadamard(output.zt, matadd(output.zt, mult(ones, -1))), transpose(huyurus2)))));
+        b = matadd(b, hadamard(output.ht, matmul(hadamard(output.zt, matadd(ones, mult(output.zt, -1))), transpose(dhuyurus2))));
+        // b = matadd(b, hadamard(output.zt, matadd(ones, matmul(mult(hadamard(output.ht,output.ht),-1))),transpose(dhuyurus3))
     }
     weights1 = matadd(weights1, mult(dw1, -learningRate));
     weights2 = matadd(weights2, mult(dw2, -learningRate));
